@@ -123,7 +123,7 @@ void experiment (bool enableCtsRts, std::string wifiManager)
   // 7. Install applications: two CBR streams each saturating the channel
   ApplicationContainer cbrApps;
   uint16_t cbrPort = 12345;
-  OnOffHelper onOffHelper1 ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address ("19.69.1.1"), cbrPort));
+  OnOffHelper onOffHelper1 ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address ("19.69.1.2"), cbrPort));
   onOffHelper1.SetAttribute ("PacketSize", UintegerValue (1400));
   onOffHelper1.SetAttribute ("OnTime",  StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
   onOffHelper1.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
@@ -131,7 +131,7 @@ void experiment (bool enableCtsRts, std::string wifiManager)
   // flow 1:  node B1 -> node A1
   onOffHelper1.SetAttribute ("DataRate", StringValue ("3000000bps"));
   onOffHelper1.SetAttribute ("StartTime", TimeValue (Seconds (1.000000)));
-  cbrApps.Add (onOffHelper1.Install (nodes.Get (1)));
+  cbrApps.Add (onOffHelper1.Install (nodes.Get (0)));
 
   OnOffHelper onOffHelper2 ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address ("19.69.1.4"), cbrPort));
   onOffHelper2.SetAttribute ("PacketSize", UintegerValue (1400));
@@ -149,14 +149,14 @@ void experiment (bool enableCtsRts, std::string wifiManager)
    * This is a workaround for the lack of perfect ARP, see \bugid{187}
    */
   uint16_t  echoPort = 9;
-  UdpEchoClientHelper echoClientHelper1 (Ipv4Address ("19.69.1.1"), echoPort);
+  UdpEchoClientHelper echoClientHelper1 (Ipv4Address ("19.69.1.2"), echoPort);
   echoClientHelper1.SetAttribute ("MaxPackets", UintegerValue (1));
   echoClientHelper1.SetAttribute ("Interval", TimeValue (Seconds (0.1)));
   echoClientHelper1.SetAttribute ("PacketSize", UintegerValue (10));
   ApplicationContainer pingApps;
 
   echoClientHelper1.SetAttribute ("StartTime", TimeValue (Seconds (0.001)));
-  pingApps.Add (echoClientHelper1.Install (nodes.Get (1)));
+  pingApps.Add (echoClientHelper1.Install (nodes.Get (0)));
 
   UdpEchoClientHelper echoClientHelper2 (Ipv4Address ("19.69.1.4"), echoPort);
   echoClientHelper2.SetAttribute ("MaxPackets", UintegerValue (1));
@@ -173,7 +173,6 @@ void experiment (bool enableCtsRts, std::string wifiManager)
 
   // 9. Run simulation for 10 seconds
   Simulator::Stop (Seconds (10));
-  AnimationInterface anim ("Wifi_Anim.xml");
   Simulator::Run ();
 
   // 10. Print per flow statistics

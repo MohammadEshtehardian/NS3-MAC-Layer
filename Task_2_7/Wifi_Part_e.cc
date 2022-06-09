@@ -28,6 +28,8 @@
  *  - IP flow monitor
  */
 
+#include <iostream>
+#include <string>
 #include "ns3/core-module.h"
 #include "ns3/command-line.h"
 #include "ns3/config.h"
@@ -52,7 +54,7 @@
 using namespace ns3;
 
 /// Run single 10 seconds experiment
-void experiment (bool enableCtsRts, std::string wifiManager)
+void experiment (bool enableCtsRts, std::string wifiManager, int n)
 {
   // 0. Enable or disable CTS/RTS
   UintegerValue ctsThr = (enableCtsRts ? UintegerValue (100) : UintegerValue (2200));
@@ -60,10 +62,10 @@ void experiment (bool enableCtsRts, std::string wifiManager)
 
   // 1. Create 4 nodes
   NodeContainer nodes;
-  nodes.Create (4);
+  nodes.Create (2*n); // nodes 0 to n-1 belong to A and other nodes belong to B
 
   // 2. Place nodes somehow, this is required by every wireless simulation
-  for (uint8_t i = 0; i < 4; ++i)
+  for (uint8_t i = 0; i < 2*n; ++i)
     {
       nodes.Get (i)->AggregateObject (CreateObject<ConstantPositionMobilityModel> ());
     }
@@ -73,10 +75,17 @@ void experiment (bool enableCtsRts, std::string wifiManager)
   Ptr<ListPositionAllocator> positionAlloc = CreateObject<ListPositionAllocator> ();
   mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
 
-  positionAlloc->Add (Vector (0.0, 0.0, 0.0));
-  positionAlloc->Add (Vector (0.0, 10.0, 0.0));
-  positionAlloc->Add (Vector (10.0, 10.0, 0.0));
-  positionAlloc->Add (Vector (10.0, 0.0, 0.0));
+  // set mobility of nodes in A collection
+  for(int i = 0; i < n; i++)
+  {
+      positionAlloc->Add (Vector(i*10.0, 0.0, 0.0));
+  }
+  
+  // set mobility of nodes in B collection
+  for(int i = 0; i < n; i++)
+  {
+      positionAlloc->Add (Vector(i*10.0, 10.0, 0.0));
+  }
 
   mobility.SetPositionAllocator (positionAlloc);
 
@@ -86,9 +95,15 @@ void experiment (bool enableCtsRts, std::string wifiManager)
   // 3. Create propagation loss matrix
   Ptr<MatrixPropagationLossModel> lossModel = CreateObject<MatrixPropagationLossModel> ();
   lossModel->SetDefaultLoss (120); // set default loss to 120 dB (no link)
-  lossModel->SetLoss (nodes.Get (0)->GetObject<MobilityModel> (), nodes.Get (1)->GetObject<MobilityModel> (), 40); // set symmetric loss A1 <-> B1 to 40 dB
-  lossModel->SetLoss (nodes.Get (2)->GetObject<MobilityModel> (), nodes.Get (1)->GetObject<MobilityModel> (), 50); // set symmetric loss B2 <-> B1 to 50 dB
-  lossModel->SetLoss (nodes.Get (3)->GetObject<MobilityModel> (), nodes.Get (2)->GetObject<MobilityModel> (), 40); // set symmetric loss A2 <-> B2 to 40 dB
+  for(int i = 0; i < n; i++)
+  {
+      lossModel->SetLoss (nodes.Get (i)->GetObject<MobilityModel> (), nodes.Get (i+n)->GetObject<MobilityModel> (), 40); // set symmetric loss Ai <-> Bi
+      if(i < n-1)
+      {
+          lossModel->SetLoss (nodes.Get (i+n)->GetObject<MobilityModel> (), nodes.Get (i+n+1)->GetObject<MobilityModel> (), 50); // set symmetric loss Bi <-> Bi+1
+      }
+      lossModel->SetLoss (nodes.Get (n)->GetObject<MobilityModel> (), nodes.Get (2*n-1)->GetObject<MobilityModel> (), 50); // set symmetric loss B1 <-> Bn
+  }
 
   // 4. Create & setup wifi channel
   Ptr<YansWifiChannel> wifiChannel = CreateObject <YansWifiChannel> ();
@@ -123,25 +138,22 @@ void experiment (bool enableCtsRts, std::string wifiManager)
   // 7. Install applications: two CBR streams each saturating the channel
   ApplicationContainer cbrApps;
   uint16_t cbrPort = 12345;
-  OnOffHelper onOffHelper1 ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address ("19.69.1.1"), cbrPort));
-  onOffHelper1.SetAttribute ("PacketSize", UintegerValue (1400));
-  onOffHelper1.SetAttribute ("OnTime",  StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
-  onOffHelper1.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
 
-  // flow 1:  node B1 -> node A1
-  onOffHelper1.SetAttribute ("DataRate", StringValue ("3000000bps"));
-  onOffHelper1.SetAttribute ("StartTime", TimeValue (Seconds (1.000000)));
-  cbrApps.Add (onOffHelper1.Install (nodes.Get (1)));
+  for(int i=0; i<n; i++)
+  {
+      std::string str = "19.69.1." + std::to_string(i+1);
+      const char * ip = str.c_str();
+      
+      OnOffHelper onOffHelper ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address (ip), cbrPort));
+      onOffHelper.SetAttribute ("PacketSize", UintegerValue (1400));
+      onOffHelper.SetAttribute ("OnTime",  StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
+      onOffHelper.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
 
-  OnOffHelper onOffHelper2 ("ns3::UdpSocketFactory", InetSocketAddress (Ipv4Address ("19.69.1.4"), cbrPort));
-  onOffHelper2.SetAttribute ("PacketSize", UintegerValue (1400));
-  onOffHelper2.SetAttribute ("OnTime",  StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
-  onOffHelper2.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
-
-  // flow 2:  node B2 -> node A2
-  onOffHelper2.SetAttribute ("DataRate", StringValue ("3000000bps"));
-  onOffHelper2.SetAttribute ("StartTime", TimeValue (Seconds (1.000005)));
-  cbrApps.Add (onOffHelper2.Install (nodes.Get (2)));
+      // flow 1:  node Bi -> node Ai
+      onOffHelper.SetAttribute ("DataRate", StringValue ("3000000bps"));
+      onOffHelper.SetAttribute ("StartTime", TimeValue (Seconds (1.000000)));
+      cbrApps.Add (onOffHelper.Install (nodes.Get (i+n)));
+  }
 
   /** \internal
    * We also use separate UDP applications that will send a single
@@ -149,23 +161,21 @@ void experiment (bool enableCtsRts, std::string wifiManager)
    * This is a workaround for the lack of perfect ARP, see \bugid{187}
    */
   uint16_t  echoPort = 9;
-  UdpEchoClientHelper echoClientHelper1 (Ipv4Address ("19.69.1.1"), echoPort);
-  echoClientHelper1.SetAttribute ("MaxPackets", UintegerValue (1));
-  echoClientHelper1.SetAttribute ("Interval", TimeValue (Seconds (0.1)));
-  echoClientHelper1.SetAttribute ("PacketSize", UintegerValue (10));
-  ApplicationContainer pingApps;
 
-  echoClientHelper1.SetAttribute ("StartTime", TimeValue (Seconds (0.001)));
-  pingApps.Add (echoClientHelper1.Install (nodes.Get (1)));
+  for(int i=0; i<n; i++)
+  {
+      std::string str = "19.69.1." + std::to_string(i+1);
+      const char * ip = str.c_str();
 
-  UdpEchoClientHelper echoClientHelper2 (Ipv4Address ("19.69.1.4"), echoPort);
-  echoClientHelper2.SetAttribute ("MaxPackets", UintegerValue (1));
-  echoClientHelper2.SetAttribute ("Interval", TimeValue (Seconds (0.1)));
-  echoClientHelper2.SetAttribute ("PacketSize", UintegerValue (10));
+      UdpEchoClientHelper echoClientHelper1 (Ipv4Address (ip), echoPort);
+      echoClientHelper1.SetAttribute ("MaxPackets", UintegerValue (1));
+      echoClientHelper1.SetAttribute ("Interval", TimeValue (Seconds (0.1)));
+      echoClientHelper1.SetAttribute ("PacketSize", UintegerValue (10));
+      ApplicationContainer pingApps;
 
-  // using different start times to workaround Bug 388 and Bug 912
-  echoClientHelper2.SetAttribute ("StartTime", TimeValue (Seconds (0.006)));
-  pingApps.Add (echoClientHelper2.Install (nodes.Get (2)));
+      echoClientHelper1.SetAttribute ("StartTime", TimeValue (Seconds (0.001*i)));
+      pingApps.Add (echoClientHelper1.Install (nodes.Get (i+n)));
+  }
 
   // 8. Install FlowMonitor on all nodes
   FlowMonitorHelper flowmon;
@@ -173,7 +183,6 @@ void experiment (bool enableCtsRts, std::string wifiManager)
 
   // 9. Run simulation for 10 seconds
   Simulator::Stop (Seconds (10));
-  AnimationInterface anim ("Wifi_Anim.xml");
   Simulator::Run ();
 
   // 10. Print per flow statistics
@@ -188,10 +197,11 @@ void experiment (bool enableCtsRts, std::string wifiManager)
       //   StartTime of the OnOffApplication is at about "second 1"
       // and
       //   Simulator::Stops at "second 10".
-      if (i->first > 2)
+      const unsigned int m = n;
+      if (i->first > m)
         {
           Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
-          std::cout << "Flow " << i->first - 2 << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
+          std::cout << "Flow " << i->first - n << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
           std::cout << "  Tx Packets: " << i->second.txPackets << "\n";
           std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
           std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
@@ -211,12 +221,13 @@ int main (int argc, char **argv)
   CommandLine cmd (__FILE__);
   cmd.AddValue ("wifiManager", "Set wifi rate manager (Aarf, Aarfcd, Amrr, Arf, Cara, Ideal, Minstrel, Onoe, Rraa)", wifiManager);
   cmd.Parse (argc, argv);
-
-  std::cout << "Hidden station experiment with RTS/CTS disabled:\n" << std::flush;
-  experiment (false, wifiManager);
+  
+  int n=3; // number of nodes
+  std::cout << "Hidden station experiment with RTS/CTS disabled: (n = " << n << ")\n" << std::flush;
+  experiment (false, wifiManager, n);
   std::cout << "------------------------------------------------\n";
-  std::cout << "Hidden station experiment with RTS/CTS enabled:\n";
-  experiment (true, wifiManager);
+  std::cout << "Hidden station experiment with RTS/CTS enabled: (n = " << n << ")\n";
+  experiment (true, wifiManager, n);
 
   return 0;
 }
