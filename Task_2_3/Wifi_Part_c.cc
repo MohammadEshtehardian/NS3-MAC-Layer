@@ -141,7 +141,7 @@ void experiment (bool enableCtsRts, std::string wifiManager)
 
   // flow 2:  node B2 -> node A2
   onOffHelper2.SetAttribute ("DataRate", StringValue ("3000000bps"));
-  onOffHelper2.SetAttribute ("StartTime", TimeValue (Seconds (1.000005)));
+  onOffHelper2.SetAttribute ("StartTime", TimeValue (Seconds (1.000000)));
   cbrApps.Add (onOffHelper2.Install (nodes.Get (3)));
 
   /** \internal
@@ -166,7 +166,7 @@ void experiment (bool enableCtsRts, std::string wifiManager)
   echoClientHelper2.SetAttribute ("PacketSize", UintegerValue (10));
 
   // using different start times to workaround Bug 388 and Bug 912
-  echoClientHelper2.SetAttribute ("StartTime", TimeValue (Seconds (0.006)));
+  echoClientHelper2.SetAttribute ("StartTime", TimeValue (Seconds (0.001)));
   pingApps.Add (echoClientHelper2.Install (nodes.Get (3)));
 
   // 8. Install FlowMonitor on all nodes

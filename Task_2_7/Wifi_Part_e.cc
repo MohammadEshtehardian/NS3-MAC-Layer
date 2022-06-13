@@ -98,11 +98,10 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
   for(int i = 0; i < n; i++)
   {
       lossModel->SetLoss (nodes.Get (i)->GetObject<MobilityModel> (), nodes.Get (i+n)->GetObject<MobilityModel> (), 40); // set symmetric loss Ai <-> Bi
-      if(i < n-1)
+      for(int j = i+1; j < n; j++)
       {
-          lossModel->SetLoss (nodes.Get (i+n)->GetObject<MobilityModel> (), nodes.Get (i+n+1)->GetObject<MobilityModel> (), 50); // set symmetric loss Bi <-> Bi+1
+        lossModel->SetLoss (nodes.Get (i+n)->GetObject<MobilityModel> (), nodes.Get (j+n)->GetObject<MobilityModel> (), 50); // set symmetric loss Bi <-> Bj
       }
-      lossModel->SetLoss (nodes.Get (n)->GetObject<MobilityModel> (), nodes.Get (2*n-1)->GetObject<MobilityModel> (), 50); // set symmetric loss B1 <-> Bn
   }
 
   // 4. Create & setup wifi channel
@@ -217,12 +216,13 @@ void experiment (bool enableCtsRts, std::string wifiManager, int n)
 
 int main (int argc, char **argv)
 {
+  int n=1; // number of nodes
   std::string wifiManager ("Arf");
   CommandLine cmd (__FILE__);
   cmd.AddValue ("wifiManager", "Set wifi rate manager (Aarf, Aarfcd, Amrr, Arf, Cara, Ideal, Minstrel, Onoe, Rraa)", wifiManager);
+  cmd.AddValue ("n", "n", n);
   cmd.Parse (argc, argv);
   
-  int n=3; // number of nodes
   std::cout << "Hidden station experiment with RTS/CTS disabled: (n = " << n << ")\n" << std::flush;
   experiment (false, wifiManager, n);
   std::cout << "------------------------------------------------\n";
