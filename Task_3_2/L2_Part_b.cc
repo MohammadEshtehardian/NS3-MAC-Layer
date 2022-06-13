@@ -11,6 +11,9 @@
 #include "ns3/flow-monitor-module.h"
 #include "ns3/netanim-module.h"
 #include "ns3/nstime.h"
+#include "ns3/mobility-model.h"
+#include "ns3/mobility-helper.h"
+#include "ns3/constant-position-mobility-model.h"
 using namespace std;
 using namespace ns3;
 NS_LOG_COMPONENT_DEFINE("L2");
@@ -170,7 +173,7 @@ int main(int argc, char *argv[])
     // find the MST
     vector < pair<int, int> > mst_edges = g.kruskalMST();
   
-    NS_LOG_INFO ("Print paths of SPT:");
+    NS_LOG_INFO ("Print paths of MST:");
     vector< pair<int, int> >::iterator it;
     for (it=mst_edges.begin(); it!=mst_edges.end(); it++)
     {
@@ -190,11 +193,55 @@ int main(int argc, char *argv[])
     NodeContainer bridges_container;
     bridges_container.Create(6);
 
+    // create mobility
+    for (uint8_t i = 0; i < 8; ++i)
+    {
+       computers_container.Get (i)->AggregateObject (CreateObject<ConstantPositionMobilityModel> ());
+    }
+
+    for (uint8_t i = 0; i < 6; ++i)
+    {
+       bridges_container.Get (i)->AggregateObject (CreateObject<ConstantPositionMobilityModel> ());
+    }
+
+
+    MobilityHelper computer_mobility;
+    Ptr<ListPositionAllocator> computer_positionAlloc = CreateObject<ListPositionAllocator> ();
+
+    computer_positionAlloc-> Add (Vector (30.0, 2.0, 0.0));
+    computer_positionAlloc-> Add (Vector (45.0, 0.0, 0.0));
+    computer_positionAlloc-> Add (Vector (85.0, 12.0, 0.0));
+    computer_positionAlloc-> Add (Vector (80.0, 25.0, 0.0));
+    computer_positionAlloc-> Add (Vector (90.0, 35.0, 0.0));
+    computer_positionAlloc-> Add (Vector (80.0, 60.0, 0.0));
+    computer_positionAlloc-> Add (Vector (-10.0, 55.0, 0.0));
+    computer_positionAlloc-> Add (Vector (-7.0, 35.0, 0.0));
+
+    computer_mobility.SetPositionAllocator(computer_positionAlloc);
+    computer_mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
+    computer_mobility.Install(computers_container);
+
+
+    MobilityHelper bridge_mobility;
+    Ptr<ListPositionAllocator> bridge_positionAlloc = CreateObject<ListPositionAllocator> ();
+
+    bridge_positionAlloc-> Add (Vector (40.0, 10.0, 0.0));
+    bridge_positionAlloc-> Add (Vector (15.0, 20.0, 0.0));
+    bridge_positionAlloc-> Add (Vector (70.0, 20.0, 0.0));
+    bridge_positionAlloc-> Add (Vector (70.0, 50.0, 0.0));
+    bridge_positionAlloc-> Add (Vector (50.0, 70.0, 0.0));
+    bridge_positionAlloc-> Add (Vector (5.0, 40.0, 0.0));
+
+    bridge_mobility.SetPositionAllocator(bridge_positionAlloc);
+    bridge_mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel");
+    bridge_mobility.Install(bridges_container);
+
+
     NS_LOG_INFO ("Build Topology");
     // csma helper for connecting computers to bridges
     CsmaHelper csma_comp_br;
     csma_comp_br.SetChannelAttribute("DataRate", StringValue("1Mbps"));
-    csma_comp_br.SetChannelAttribute("Delay", TimeValue(MicroSeconds(10.0/50.0*1)));
+    csma_comp_br.SetChannelAttribute("Delay", TimeValue(MicroSeconds(10.0/50.0*1.0)));
 
     // computers and bridges device container
     NetDeviceContainer computers_device_container;
@@ -238,7 +285,7 @@ int main(int argc, char *argv[])
         }
 
         csma.SetChannelAttribute("DataRate", StringValue("1Mbps"));
-        csma.SetChannelAttribute("Delay", TimeValue(MicroSeconds(w/50.0*1)));
+        csma.SetChannelAttribute("Delay", TimeValue(MicroSeconds(w/50.0*1.0)));
         link = csma.Install(NodeContainer(bridges_container.Get(u-1), bridges_container.Get(v-1)));
         bridges_device_containers[u-1].Add (link.Get(0));
         bridges_device_containers[v-1].Add (link.Get(1));
@@ -272,32 +319,16 @@ int main(int argc, char *argv[])
     onoff1.SetConstantRate (DataRate ("1000kb/s"));
     app1.Add(onoff1.Install (computers_container.Get(0)));
 
-    PacketSinkHelper sink ("ns3::UdpSocketFactory", Address (InetSocketAddress (Ipv4Address::GetAny (), port)));
-    ApplicationContainer sink1 = sink.Install (computers_container.Get(5));
-    sink1.Start (Seconds (1.0));
-    sink1.Stop (Seconds (11.0));
-
     // flow from C2 to C7
     OnOffHelper onoff2 ("ns3::UdpSocketFactory", Address (InetSocketAddress (Ipv4Address ("10.10.91.7"), port)));
     onoff2.SetConstantRate (DataRate ("1000kb/s"));
     app2.Add(onoff2.Install (computers_container.Get(1)));    
 
-    ApplicationContainer sink2 = sink.Install (computers_container.Get(6));
-    sink2.Start (Seconds (1.1));
-    sink2.Stop (Seconds (11.1));
-
     // start the application
     app1.Start (Seconds (1.0));
     app1.Stop (Seconds (11.0));
-    app2.Start (Seconds (1.1));
-    app2.Stop (Seconds (11.1));
-
-    // enable trace files
-    // AsciiTraceHelper ascii;
-    // csma.EnableAsciiAll (ascii.CreateFileStream ("L2.tr"));
-
-    // enabel pcap files
-    // csma_comp_br.EnablePcapAll ("L2", false);
+    app2.Start (Seconds (1.0));
+    app2.Stop (Seconds (11.0));
 
     NS_LOG_INFO ("Run Simulation.");
     FlowMonitorHelper flowmon;
@@ -322,7 +353,6 @@ int main(int argc, char *argv[])
             cout << "  Delay:  " << (i->second.delaySum/i->second.rxPackets).As(Time::AUTO) << "\n";
         }
 
-    // 11. Cleanup
     Simulator::Destroy ();
   
     return 0;
